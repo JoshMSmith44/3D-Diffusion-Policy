@@ -15,7 +15,10 @@ from dm_env import StepType, specs
 from collections import OrderedDict
 from gym import spaces
 from mjrl.utils.gym_env import GymEnv
-from .rrl_local.rrl_multicam import BasicAdroitEnv, BasicFrankaEnv
+from .rrl_local.rrl_multicam import BasicAdroitEnv, BasicFrankaEnv 
+from .rrl_local.rrl_multicam_pair import BasicPairedAdroitEnv
+import cv2
+import matplotlib.pyplot as plt
 
 
 class ExtendedTimeStep(NamedTuple):
@@ -140,8 +143,7 @@ class FrameStackWrapper(dm_env.Environment):
     def observation_spec(self):
         return self._obs_spec
 
-    def action_spec(self):
-        return self._env.action_spec()
+    def action_spec(self):ot
 
     def __getattr__(self, name):
         return getattr(self._env, name)
@@ -229,7 +231,7 @@ class AdroitEnv:
     # a wrapper class that will make Adroit env looks like a dmc env
     def __init__(self, env_name, test_image=False, cam_list=None,
                  num_repeats=2, num_frames=1, env_feature_type='pixels', device='cuda', reward_rescale=True,
-                 use_point_cloud=False):
+                 use_point_cloud=False, use_paired_env = True):
         if '-v0' not in env_name:  # compatibility with gym env name
             env_name += '-v0'
         default_env_to_cam_list = {
@@ -255,10 +257,11 @@ class AdroitEnv:
 
         # env, _ = make_basic_env(env_name, cam_list=cam_list, from_pixels=from_pixels, hybrid_state=True,
         #     test_image=test_image, channels_first=True, num_repeats=num_repeats, num_frames=num_frames)
-        env = GymEnv(env_name)
+        print("env name", env_name)
         if env_feature_type == 'state':
             raise NotImplementedError("state env not ready")
         elif env_feature_type == 'resnet18' or env_feature_type == 'resnet34':
+            env = GymEnv(env_name)
             # TODO maybe we will just throw everything into it..
             height = 256
             width = 256
@@ -273,9 +276,19 @@ class AdroitEnv:
             width = 84
             latent_dim = height*width*len(cam_list)*num_frames
             # RRL class instance is environment wrapper...
-            env = BasicAdroitEnv(env, cameras=cam_list,
-                                 height=height, width=width, latent_dim=latent_dim, hybrid_state=True,
-                                 test_image=test_image, channels_first=True, num_repeats=num_repeats, num_frames=num_frames, device=device)
+            #env = BasicAdroitEnv(env, cameras=cam_list,
+            #                     height=height, width=width, latent_dim=latent_dim, hybrid_state=True,
+            #                     test_image=test_image, channels_first=True, num_repeats=num_repeats, num_frames=num_frames, device=device)
+            if use_paired_env:
+                env = BasicPairedAdroitEnv(env_name, cameras=cam_list,
+                                    height=height, width=width, latent_dim=latent_dim, hybrid_state=True,
+                                    test_image=test_image, channels_first=True, num_repeats=num_repeats, num_frames=num_frames, device=device)
+            else:
+                env = GymEnv(env_name)
+                env = BasicAdroitEnv(env, cameras=cam_list,
+                                    height=height, width=width, latent_dim=latent_dim, hybrid_state=True,
+                                    test_image=test_image, channels_first=True, num_repeats=num_repeats, num_frames=num_frames, device=device)
+
         else:
             raise ValueError("env feature not supported")
 
@@ -419,6 +432,10 @@ class AdroitEnv:
     def render(self, mode):
         assert mode == 'rgb_array'
         img = self.get_pixels_with_width_height(84, 84)
+        img2 = self.get_pixels_with_width_height(512, 512)
+        img2 = np.transpose(img2, (1, 2, 0))  # it has been 0-255
+        #plt.imshow(np.array(img2.astype(np.uint8)))
+        #plt.show()
         # make it channel last
         img = np.transpose(img, (1, 2, 0))  # it has been 0-255
         # (84, 84, 3), uint8, 0-255

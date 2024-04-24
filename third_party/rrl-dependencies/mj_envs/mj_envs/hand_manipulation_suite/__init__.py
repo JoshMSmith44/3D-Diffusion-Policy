@@ -32,3 +32,17 @@ register(
     max_episode_steps=200,
 )
 from mj_envs.hand_manipulation_suite.relocate_v0 import RelocateEnvV0
+
+register(
+    id='claw-door-v0',
+    entry_point='mj_envs.hand_manipulation_suite:ClawDoorEnvV0',
+    max_episode_steps=200,
+)
+from mj_envs.hand_manipulation_suite.claw_door_v0 import ClawDoorEnvV0
+
+register(
+    id='nocol-door-v0',
+    entry_point='mj_envs.hand_manipulation_suite:DoorEnvV0',
+    max_episode_steps=200,
+)
+from mj_envs.hand_manipulation_suite.nocol_door_v0 import NocolDoorEnvV0

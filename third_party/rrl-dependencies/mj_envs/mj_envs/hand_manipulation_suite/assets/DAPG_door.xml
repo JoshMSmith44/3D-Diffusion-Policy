@@ -88,6 +88,7 @@
         <general name="A_ARRy" joint="ARRy" ctrlrange="-.75 .75" biastype="affine" gainprm="500 0 0" biasprm="0 -200 0" />
         <general name="A_ARRz" joint="ARRz" ctrlrange="-1.0 2.0" biastype="affine" gainprm="500 0 0" biasprm="0 -200 0" />
     </actuator>
+    <!--<include file='DAPG_assets2.xml'/>-->
     <include file='DAPG_assets.xml'/>
 
 </mujoco>

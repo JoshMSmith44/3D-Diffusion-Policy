@@ -13,6 +13,8 @@ from diffusion_policy_3d.env_runner.base_runner import BaseRunner
 import diffusion_policy_3d.common.logger_util as logger_util
 from termcolor import cprint
 
+import matplotlib.pyplot as plt
+
 
 class AdroitRunner(BaseRunner):
     def __init__(self,
@@ -67,6 +69,7 @@ class AdroitRunner(BaseRunner):
         
 
 
+        self.eval_episodes = 2
         for episode_idx in tqdm.tqdm(range(self.eval_episodes), desc=f"Eval in Adroit {self.task_name} Pointcloud Env",
                                      leave=False, mininterval=self.tqdm_interval_sec):
                 
@@ -107,6 +110,7 @@ class AdroitRunner(BaseRunner):
 
             all_success_rates.append(info['goal_achieved'])
             all_goal_achieved.append(num_goal_achieved)
+            print(episode_idx)
 
 
         # log
@@ -125,10 +129,14 @@ class AdroitRunner(BaseRunner):
         log_data['SR_test_L3'] = self.logger_util_test.average_of_largest_K()
         log_data['SR_test_L5'] = self.logger_util_test10.average_of_largest_K()
 
+        print("before get video")
         videos = env.env.get_video()
+        print("after get video")
         if len(videos.shape) == 5:
             videos = videos[:, 0]  # select first frame
+        print("videos", videos.shape)
         videos_wandb = wandb.Video(videos, fps=self.fps, format="mp4")
+        print("after wandb video")
         log_data[f'sim_video_eval'] = videos_wandb
 
         # clear out video buffer

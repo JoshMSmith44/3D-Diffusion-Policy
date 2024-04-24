@@ -355,8 +355,8 @@ class TrainDP3Workspace:
         policy.eval()
         policy.cuda()
 
+
         runner_log = env_runner.run(policy)
-        
       
         cprint(f"---------------- Eval Results --------------", 'magenta')
         for key, value in runner_log.items():
