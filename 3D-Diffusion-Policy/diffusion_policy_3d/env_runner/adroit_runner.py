@@ -12,8 +12,24 @@ from diffusion_policy_3d.common.pytorch_util import dict_apply
 from diffusion_policy_3d.env_runner.base_runner import BaseRunner
 import diffusion_policy_3d.common.logger_util as logger_util
 from termcolor import cprint
+import cv2
 
 import matplotlib.pyplot as plt
+
+def export_video(frames, output_path, fps=30):
+    num_frames, _, y_res, x_res = frames.shape
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (x_res, y_res))
+
+    for frame in frames:
+        # Convert the frame from numpy array to uint8
+        frame = np.uint8(frame.transpose(1, 2, 0)[:, :, ::-1])
+        # Write the frame to the video file
+        out.write(frame)
+
+    # Release the VideoWriter object
+    out.release()
+
 
 
 class AdroitRunner(BaseRunner):
@@ -69,7 +85,8 @@ class AdroitRunner(BaseRunner):
         
 
 
-        self.eval_episodes = 2
+        self.eval_episodes = 50
+        videos = []
         for episode_idx in tqdm.tqdm(range(self.eval_episodes), desc=f"Eval in Adroit {self.task_name} Pointcloud Env",
                                      leave=False, mininterval=self.tqdm_interval_sec):
                 
@@ -110,7 +127,7 @@ class AdroitRunner(BaseRunner):
 
             all_success_rates.append(info['goal_achieved'])
             all_goal_achieved.append(num_goal_achieved)
-            print(episode_idx)
+            videos.append(env.env.get_video())
 
 
         # log
@@ -129,15 +146,17 @@ class AdroitRunner(BaseRunner):
         log_data['SR_test_L3'] = self.logger_util_test.average_of_largest_K()
         log_data['SR_test_L5'] = self.logger_util_test10.average_of_largest_K()
 
-        print("before get video")
-        videos = env.env.get_video()
-        print("after get video")
-        if len(videos.shape) == 5:
-            videos = videos[:, 0]  # select first frame
-        print("videos", videos.shape)
-        videos_wandb = wandb.Video(videos, fps=self.fps, format="mp4")
-        print("after wandb video")
-        log_data[f'sim_video_eval'] = videos_wandb
+        videos = np.concatenate(videos, axis=0)
+        #if len(videos.shape) == 5:
+        #    videos = videos[:, 0]  # select first frame
+        export_video(videos, './out.mp4', 10)
+        #cv2.imshow("test", np.zeros((100, 100, 3), dtype=np.uint8))
+        #cv2.waitKey(30)
+
+
+        #videos_wandb = wandb.Video(videos, fps=self.fps, format="mp4")
+        #print("after wandb video")
+        #log_data[f'sim_video_eval'] = videos_wandb
 
         # clear out video buffer
         _ = env.reset()

@@ -56,15 +56,20 @@ cense at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicabl
             ======= Adroit ======= 
             <include file="DAPG_Adroit.xml"/>
         -->
-        <body name="forearm" pos="0 -0.35 0.2" euler="0 1.57 -1.57">
-            <inertial pos="0 0 0" euler="0 0 0" mass="0.2" diaginertia="0.01 0.01 0.0075" />
-            <joint name="ARTx" pos="-0.195 0 0.053" axis="1 0 0" type="slide" range="-1.0 1.0" damping="20" />
-            <joint name="ARTy" pos="-0.195 0 0.053" axis="0 1 0" type="slide" range="-1.0 1.0" damping="20" />
-            <joint name="ARTz" pos="-0.195 0 0.053" axis="0 0 1" type="slide" range="-1.0 1.0" damping="20" />
-            <joint name="ARRx" pos="-0.195 0 0.053" axis="1 0 0" range="-2 2" damping="20" />
-            <joint name="ARRy" pos="-0.195 0 0.053" axis="0 1 0" range="-2 2" damping="20" />
-            <joint name="ARRz" pos="-0.195 0 0.053" axis="0 0 1" range="-2 2" damping="20" />
-            <include file="floating_gripper.xml"/>
+        <body name="forearm" pos="0 -.35 0.2" euler="0 0 0">
+            <joint name="ARTx" pos="0 0 0" axis="1 0 0" type="slide" range="-1.0 1.0" damping="20" />
+            <joint name="ARTy" pos="0 0 0" axis="0 1 0" type="slide" range="-1.0 1.0" damping="20" />
+            <joint name="ARTz" pos="0 0 0" axis="0 0 1" type="slide" range="-1.0 1.0" damping="20" />
+            <joint name="ARRx" pos="0 0 0" axis="1 0 0" range="-3 3" damping="20" />
+            <joint name="ARRz" pos="0 0 0" axis="0 0 1" range="-3 3" damping="20" />
+            <!--<joint name="ARRy" pos="0 0 0" axis="0 1 0" range="-3 3" damping="20" />-->
+            <!-- minus0.195 0 0.053-->
+            <body name="forearm_rot" pos="0 0 0" euler="0 3.14 -1.57">
+                <inertial pos="0 0 0" euler="0 0 0" mass="2" diaginertia="0.01 0.01 0.0075" />
+                <body name="forearm_trans" pos="0.195 0 -0.053" euler="0 0 0">
+                    <include file="floating_gripper.xml"/>
+                </body>
+            </body>
         </body>
 
         <!-- ======= DOOR ======= -->
@@ -93,12 +98,13 @@ cense at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicabl
     </worldbody>
     
     <actuator>
-        <general name="A_ARTx" joint="ARTx" ctrlrange="-1 1" biastype="affine" gainprm="500 0 0" biasprm="0 -500 -50" />
-        <general name="A_ARTy" joint="ARTy" ctrlrange="-1 1" biastype="affine" gainprm="500 0 0" biasprm="57 -500 -50" />
-        <general name="A_ARTz" joint="ARTz" ctrlrange="-1 1" biastype="affine" gainprm="500 0 0" biasprm="0 -500 -50" />
-        <general name="A_ARRx" joint="ARRx" ctrlrange="-2 2" biastype="affine" gainprm="500 0 0" biasprm="0 -500 0" />
-        <general name="A_ARRy" joint="ARRy" ctrlrange="-2 2" biastype="affine" gainprm="500 0 0" biasprm="0 -500 0" />
-        <general name="A_ARRz" joint="ARRz" ctrlrange="-2 2" biastype="affine" gainprm="500 0 0" biasprm="0 -500 0" />
+        <general name="A_ARTx" joint="ARTx" ctrlrange="-1 1" biastype="affine" gainprm="4000 0 0" biasprm="0 -4000 -150" />
+        <general name="A_ARTy" joint="ARTy" ctrlrange="-1 1" biastype="affine" gainprm="4000 0 0" biasprm="-10 -4000 -150" />
+        <general name="A_ARTz" joint="ARTz" ctrlrange="-1 1" biastype="affine" gainprm="4000 0 0" biasprm="0 -4000 -150" />
+        <general name="A_ARRx" joint="ARRx" ctrlrange="-3 3" biastype="affine" gainprm="1500 0 0" biasprm="0 -1500 -10" />
+        <general name="A_ARRy" joint="ARRy" ctrlrange="-3 3" biastype="affine" gainprm="1500 0 0" biasprm="0 -1500 -10" />
+        <general name="A_ARRz" joint="ARRz" ctrlrange="-3 3" biastype="affine" gainprm="1500 0 0" biasprm="0 -1500 -10" />
+
     </actuator>
     <include file='DAPG_assets_mod.xml'/>
     <include file='floating_gripper_assets.xml'/>

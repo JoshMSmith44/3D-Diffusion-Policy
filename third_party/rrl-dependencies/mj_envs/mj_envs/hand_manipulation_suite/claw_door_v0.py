@@ -38,11 +38,11 @@ class ClawDoorEnvV0(mujoco_env.MujocoEnv, utils.EzPickle):
         
 
     def step(self, a):
-        a = np.clip(a, -1.0, 1.0)
-        try:
-            a = self.act_mid + a*self.act_rng # mean center and scale
-        except:
-            a = a                             # only for the initialization phase
+        #a = np.clip(a, -1.0, 1.0)
+        #try:
+        #    a = self.act_mid + a*self.act_rng # mean center and scale
+        #except:
+        #    a = a                             # only for the initialization phase
         self.do_simulation(a, self.frame_skip)
         ob = self.get_obs()
         handle_pos = self.data.site_xpos[self.handle_sid].ravel()

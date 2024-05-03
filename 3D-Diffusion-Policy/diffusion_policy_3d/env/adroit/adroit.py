@@ -230,7 +230,7 @@ class AdroitEnv:
 
     # a wrapper class that will make Adroit env looks like a dmc env
     def __init__(self, env_name, test_image=False, cam_list=None,
-                 num_repeats=2, num_frames=1, env_feature_type='pixels', device='cuda', reward_rescale=True,
+                 num_repeats=1, num_frames=1, env_feature_type='pixels', device='cuda', reward_rescale=True,
                  use_point_cloud=False, use_paired_env = True):
         if '-v0' not in env_name:  # compatibility with gym env name
             env_name += '-v0'
@@ -347,6 +347,7 @@ class AdroitEnv:
                 shape=(1024, 6),
                 dtype=np.float32
             )
+        self.use_paired_env = use_paired_env
 
     def reset(self):
         # pixels and sensor values
@@ -378,8 +379,11 @@ class AdroitEnv:
                                            time_limit_reached=False)
         return time_step
 
-    def get_pixels_with_width_height(self, w, h):
-        return self._env.get_pixels_with_width_height(w, h)
+    def get_pixels_with_width_height(self, w, h, claw_env = False):
+        if self.use_paired_env:
+            return self._env.get_pixels_with_width_height(w, h, claw_env=claw_env)
+        else:
+            return self._env.get_pixels_with_width_height(w, h)
 
     def step(self, action, force_step_type=None, debug=False):
 
@@ -439,7 +443,13 @@ class AdroitEnv:
         # make it channel last
         img = np.transpose(img, (1, 2, 0))  # it has been 0-255
         # (84, 84, 3), uint8, 0-255
-        return img
+        img_claw = self.get_pixels_with_width_height(512, 512, claw_env = True)
+        img_claw = np.transpose(img_claw, (1, 2, 0))
+        out_img = np.concatenate([img2, img_claw], axis=1)
+        if self.use_paired_env:
+            return out_img
+        else:
+            return img2
 
     def get_mujoco_sim(self):
         """
