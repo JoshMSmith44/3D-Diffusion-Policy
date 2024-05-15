@@ -10,6 +10,7 @@ USE_SPARSE_REWARDS = True
 class DoorEnvV0(mujoco_env.MujocoEnv, utils.EzPickle):
     def __init__(self):
         self.door_hinge_did = 0
+        self.door_latch_did = 0
         self.door_bid = 0
         self.grasp_sid = 0
         self.handle_sid = 0
@@ -18,6 +19,7 @@ class DoorEnvV0(mujoco_env.MujocoEnv, utils.EzPickle):
         mujoco_env.MujocoEnv.__init__(self, curr_dir+'/assets/DAPG_door.xml', 5)
         
         self.door_hinge_did = self.model.jnt_dofadr[self.model.joint_name2id('door_hinge')]
+        self.door_latch_did = self.model.jnt_dofadr[self.model.joint_name2id('latch')]
         self.grasp_sid = self.model.site_name2id('S_grasp')
         self.handle_sid = self.model.site_name2id('S_handle')
         self.door_bid = self.model.body_name2id('frame')
@@ -48,6 +50,8 @@ class DoorEnvV0(mujoco_env.MujocoEnv, utils.EzPickle):
         handle_pos = self.data.site_xpos[self.handle_sid].ravel()
         palm_pos = self.data.site_xpos[self.grasp_sid].ravel()
         door_pos = self.data.qpos[self.door_hinge_did]
+        latch_angle = self.data.qpos[self.door_latch_did]
+
 
         # get to handle
         reward = -0.1*np.linalg.norm(palm_pos-handle_pos)
@@ -74,9 +78,9 @@ class DoorEnvV0(mujoco_env.MujocoEnv, utils.EzPickle):
             if door_pos > 1.35:
                 reward += 10
 
-        goal_achieved = True if door_pos > 1.4 else False
+        goal_achieved = True if door_pos > 1.17 else False#1.4 else False
 
-        return ob, reward, False, dict(goal_achieved=goal_achieved)
+        return ob, reward, False, dict(goal_achieved=goal_achieved, latch_angle = latch_angle, door_pos = door_pos)
 
     def get_obs(self):
         # qpos for hand

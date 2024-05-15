@@ -230,7 +230,7 @@ class AdroitEnv:
 
     # a wrapper class that will make Adroit env looks like a dmc env
     def __init__(self, env_name, test_image=False, cam_list=None,
-                 num_repeats=1, num_frames=1, env_feature_type='pixels', device='cuda', reward_rescale=True,
+                 num_repeats=2, num_frames=1, env_feature_type='pixels', device='cuda', reward_rescale=True,
                  use_point_cloud=False, use_paired_env = True):
         if '-v0' not in env_name:  # compatibility with gym env name
             env_name += '-v0'
@@ -257,7 +257,6 @@ class AdroitEnv:
 
         # env, _ = make_basic_env(env_name, cam_list=cam_list, from_pixels=from_pixels, hybrid_state=True,
         #     test_image=test_image, channels_first=True, num_repeats=num_repeats, num_frames=num_frames)
-        print("env name", env_name)
         if env_feature_type == 'state':
             raise NotImplementedError("state env not ready")
         elif env_feature_type == 'resnet18' or env_feature_type == 'resnet34':
@@ -386,7 +385,7 @@ class AdroitEnv:
             return self._env.get_pixels_with_width_height(w, h)
 
     def step(self, action, force_step_type=None, debug=False):
-
+        
         obs_all, reward, done, env_info = self._env.step(action)
 
         obs_pixels, obs_sensor = obs_all

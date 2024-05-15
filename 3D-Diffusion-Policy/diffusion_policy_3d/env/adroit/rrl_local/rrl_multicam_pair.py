@@ -12,6 +12,7 @@ from mjrl.utils.gym_env import GymEnv
 import matplotlib.pyplot as plt
 from mujoco_py import MjRenderContextOffscreen
 from scipy.spatial.transform import Rotation
+import mujoco_py
 
 _mj_envs = {'pen-v0', 'hammer-v0', 'door-v0', 'relocate-v0'}
 
@@ -53,6 +54,7 @@ class BasicPairedAdroitEnv(gym.Env): # , ABC
 
         self.viewer = None
         env = GymEnv("nocol-" + env_name)
+        #env = GymEnv(env_name)
         self._env = env
         self._claw_env = GymEnv("claw-" + env_name)
         self._env.viewer = None
@@ -108,6 +110,100 @@ class BasicPairedAdroitEnv(gym.Env): # , ABC
         print("norm env action shape", self._env.action_space)
         print("claw env action shape", self._claw_env.action_space)
         print("")
+
+        self.ik = True
+        self.wait_until_still = True
+        if self.wait_until_still:
+            print("Wait until still")
+
+    
+    def do_ik(self):
+        hand_sim = self._env.env.sim
+        hand_model = hand_sim.model
+        hand_data = hand_sim.data
+
+        init_qpos = np.copy(hand_data.qpos)
+
+
+        # Load the MuJoCo hand model
+        claw_sim = self._claw_env.env.sim
+        claw_model = claw_sim.model
+        claw_data = claw_sim.data
+
+        def jacobian():
+            # Call mj_comPos (required for Jacobians).
+            mujoco_py.functions.mj_comPos(hand_model, hand_data)
+
+            # Get end-effector site Jacobian.
+            #jac_pos_ff = np.empty((3, hand_model.nv))
+            #jac_quat_ff = np.empty((3, hand_model.nv))
+            #jac_pos_th = np.empty((3, hand_model.nv))
+            #jac_quat_th = np.empty((3, hand_model.nv))
+            #mujoco_py.mj_jacSite(hand_model, hand_data, jac_pos_ff, jac_quat_ff, hand_data.site('Tch_fftip').id)
+            #mujoco_py.mj_jacSite(hand_model, hand_data, jac_pos_th, jac_quat_th, hand_data.site('Tch_thtip').id)
+
+            jac_pos_ff = np.empty((3 * hand_model.nv))
+            jac_pos_th = np.empty((3 * hand_model.nv))
+            hand_data.get_site_jacp('Tch_mftip', jacp = jac_pos_ff)
+            hand_data.get_site_jacp('Tch_thtip', jacp = jac_pos_th)
+            jac_pos_ff = jac_pos_ff.reshape(3, hand_model.nv)
+            jac_pos_th = jac_pos_th.reshape(3, hand_model.nv)
+
+            # Stack jacobians in single 6x30 matrix
+            return np.vstack((jac_pos_ff, jac_pos_th))
+        
+        def solve_ik(max_iterations=100, tolerance=1e-6):
+            mujoco_py.functions.mj_kinematics(hand_model, hand_data)
+            current_angles = hand_data.qpos
+            current_positions = np.hstack((hand_data.get_site_xpos('Tch_mftip'), hand_data.get_site_xpos('Tch_thtip')))
+
+            claw_left = claw_data.get_site_xpos('gripper_frame_2_ur5right')
+            claw_right = claw_data.get_site_xpos('gripper_frame_1_ur5right')
+
+            # Position residual.
+            target_positions = np.hstack((claw_left, claw_right))
+
+            for i in range(max_iterations):
+                # Compute end effector positions
+                hand_data.qpos[:] = current_angles
+                mujoco_py.functions.mj_kinematics(hand_model, hand_data)
+                current_positions = np.hstack((hand_data.get_site_xpos('Tch_mftip'), hand_data.get_site_xpos('Tch_thtip')))
+                
+                # Compute error between current and target positions
+                error = target_positions - current_positions
+                
+                # Check convergence
+                if np.linalg.norm(error) < tolerance:
+                    print("Convergence achieved after", i+1, "iterations.")
+                    return current_angles
+                
+                # Compute gradient using pseudo-inverse Jacobian
+                jac = jacobian()
+                jac_pinv = np.linalg.pinv(jac)
+                position_gradient = np.dot(jac_pinv, error)        
+                
+                # Compute nullspace projector
+                nullspace_projector = np.eye(hand_model.njnt) - np.dot(jac_pinv, jac)
+
+                # Secondary task: Drive joints towards the centers of their limits
+                #joint_limits_midpoints = 0.5 * (hand_model.jnt_range[:, 0] + hand_model.jnt_range[:, 1])
+                joint_limits_midpoints = init_qpos
+                joint_limits_error = joint_limits_midpoints - current_angles
+                joint_limits_gradient = np.dot(nullspace_projector, joint_limits_error)
+                
+                # Update joint angles
+                current_angles += position_gradient + joint_limits_gradient
+
+            print("Max iterations reached without convergence.")
+            return current_angles
+        new_q = solve_ik()
+        hand_data.qpos[:] = new_q
+        #hand_data.qpos[28:] = 0
+        mujoco_py.functions.mj_step(hand_model, hand_data)
+
+
+
+  # return np.vstack((jac_pos_ff, jac_quat_ff, jac_pos_th, jac_quat_th))
 
     def get_obs(self,):
         # for our case, let's output the image, and then also the sensor features
@@ -233,21 +329,43 @@ class BasicPairedAdroitEnv(gym.Env): # , ABC
     def reset(self):
         self._claw_env.reset()
         self._env.reset()
-        self.set_env_to_claw_env_state()
+        if self.wait_until_still:
+            self.prev_action = np.zeros(self.action_space.shape)
+            self.prev_action[0] = -0.3
+            self.step_until_still(self.prev_action)
 
         claw_action = self.get_desired_claw_pose()
-        for i in range(14):
+        for i in range(20):
             self._claw_env.step(claw_action)
             #disp_img = self.get_paired_display()
             #plt.imshow(disp_img)
             #plt.show()
             thumb_tip = self._claw_env.env.sim.data.get_body_xpos("forearm")
+        self.set_env_to_claw_env_state()
 
         pixels, sensor_info = self.get_obs()
         for _ in range(self._num_frames):
             self._frames.append(pixels)
         stacked_pixels = self.get_stacked_pixels()
         return stacked_pixels, sensor_info
+    
+    def trim_action(self, action, max_diff = 0.05):
+        diff = action - self.prev_action
+        diff[diff > max_diff] = max_diff
+        diff[diff < -max_diff] = -max_diff
+        return self.prev_action + diff
+    
+    def step_until_still(self, action, max_iter = 100, vel_thresh = 0.03):
+        obs, reward, done, env_info = self._env.step(action)
+        count = 1
+        while count < max_iter:
+            self._env.env._elapsed_steps -= 1
+            obs, reward, done, env_info = self._env.step(action)
+            state = self._env.get_env_state()
+            if np.max(np.abs(state['qvel'])) < vel_thresh:
+                break
+            count += 1
+        return obs, reward, done, env_info
     
     def get_paired_display(self, cam_ind = 0):
         #_env_render_cont = MjRenderContextOffscreen(self._env.env.sim, device_id=0)
@@ -280,11 +398,20 @@ class BasicPairedAdroitEnv(gym.Env): # , ABC
         n_goal_achieved = 0
         #self._num_repeats = 1
         for i_action in range(self._num_repeats): 
-            obs, reward, done, env_info = self._env.step(action)
+            if self.wait_until_still:
+                action = self.trim_action(action)
+                self.prev_action = action
+                obs, reward, done, env_info = self.step_until_still(action)
+            else:
+                obs, reward, done, env_info = self._env.step(action)
+            if 'TimeLimit.truncated' in env_info:
+                truncated = env_info['TimeLimit.truncated']
+            else:
+                truncated = False
             claw_action = self.get_desired_claw_pose()
-            for j in range(5):
-                _, reward, done, env_info = self._claw_env.step(claw_action)
-            print("env info", env_info)
+            for j in range(20):
+                _, claw_reward, _2, claw_env_info = self._claw_env.step(claw_action)
+            env_info['TimeLimit.truncated'] = truncated
             self.set_env_to_claw_env_state()
             reward_sum += reward 
             if env_info['goal_achieved'] == True:
@@ -311,6 +438,8 @@ class BasicPairedAdroitEnv(gym.Env): # , ABC
         return self._claw_env.get_env_state()
     
     def set_env_to_claw_env_state(self):
+        if self.ik:
+            self.do_ik()
         claw_state = self.get_claw_env_state()
         env_state = self.get_env_state()
         if self.env_id == 'door-v0':

@@ -43,7 +43,7 @@ def render_high_res(sim, camera_name="top"):
 def main():
     args = parse_args()
     # load env
-    action_repeat = 1
+    action_repeat = 2
     frame_stack = 1
     def create_env():
         env = AdroitEnv(env_name=args.env_name+'-v0', test_image=False, num_repeats=action_repeat,

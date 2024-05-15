@@ -82,10 +82,13 @@ class AdroitRunner(BaseRunner):
 
         all_goal_achieved = []
         all_success_rates = []
+        all_rew_sums = []
+        all_max_door = []
+        all_max_knob = []
         
 
 
-        self.eval_episodes = 50
+        self.eval_episodes = 100
         videos = []
         for episode_idx in tqdm.tqdm(range(self.eval_episodes), desc=f"Eval in Adroit {self.task_name} Pointcloud Env",
                                      leave=False, mininterval=self.tqdm_interval_sec):
@@ -97,6 +100,9 @@ class AdroitRunner(BaseRunner):
             done = False
             num_goal_achieved = 0
             actual_step_count = 0
+            rew_list = []
+            max_door_angle = 0
+            max_latch_angle = 0
             while not done:
                 # create obs dict
                 np_obs_dict = dict(obs)
@@ -120,11 +126,24 @@ class AdroitRunner(BaseRunner):
                 action = np_action_dict['action'].squeeze(0)
                 # step env
                 obs, reward, done, info = env.step(action)
+                print("runner step")
                 # all_goal_achieved.append(info['goal_achieved']
+                rew_list.append(reward)
+                print("info", info)
                 num_goal_achieved += np.sum(info['goal_achieved'])
+                door_angle = info['door_pos']
+                latch_angle = info['latch_angle']
+                if door_angle > max_door_angle:
+                    max_door_angle = door_angle
+                if latch_angle > max_latch_angle:
+                    max_latch_angle = latch_angle
                 done = np.all(done)
                 actual_step_count += 1
 
+            rew_sum = np.sum(np.array(rew_list))
+            all_rew_sums.append(rew_sum)
+            all_max_door.append(max_door_angle)
+            all_max_knob.append(max_latch_angle)
             all_success_rates.append(info['goal_achieved'])
             all_goal_achieved.append(num_goal_achieved)
             videos.append(env.env.get_video())
@@ -145,6 +164,10 @@ class AdroitRunner(BaseRunner):
         self.logger_util_test10.record(np.mean(all_success_rates))
         log_data['SR_test_L3'] = self.logger_util_test.average_of_largest_K()
         log_data['SR_test_L5'] = self.logger_util_test10.average_of_largest_K()
+
+        log_data['mean max door'] = np.mean(all_max_door)
+        log_data['mean max knob'] = np.mean(all_max_knob)
+        log_data['mean rew sum'] = np.mean(all_rew_sums)
 
         videos = np.concatenate(videos, axis=0)
         #if len(videos.shape) == 5:

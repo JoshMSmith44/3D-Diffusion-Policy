@@ -27,7 +27,10 @@ def make_encoder(encoder, encoder_type, device, is_eval=True) :
 
 class BasicAdroitEnv(gym.Env): # , ABC
     def __init__(self, env, cameras, latent_dim=512, hybrid_state=True, channels_first=False, 
-    height=84, width=84, test_image=False, num_repeats=1, num_frames=1, encoder_type=None, device=None):
+    height=84, width=84, test_image=False, num_repeats=1, num_frames=1, encoder_type=None, device=None, wait_until_still = True):
+
+        if wait_until_still:
+            print("MODIFIED RRL LOCAL!!!!222")
         self._env = env
         self.env_id = env.env.unwrapped.spec.id
         self.device = device
@@ -75,6 +78,8 @@ class BasicAdroitEnv(gym.Env): # , ABC
         self.spec = self._env.spec
         self.observation_dim = self.spec.observation_dim
         self.horizon = self._env.env.spec.max_episode_steps
+
+        self.wait_until_still = wait_until_still
 
     def get_obs(self,):
         # for our case, let's output the image, and then also the sensor features
@@ -159,6 +164,10 @@ class BasicAdroitEnv(gym.Env): # , ABC
 
     def reset(self):
         self._env.reset()
+        if self.wait_until_still:
+            self.prev_action = np.zeros(self.action_space.shape)
+            self.prev_action[0] = -0.3
+            self.step_until_still(self.prev_action)
         pixels, sensor_info = self.get_obs()
         for _ in range(self._num_frames):
             self._frames.append(pixels)
@@ -171,13 +180,36 @@ class BasicAdroitEnv(gym.Env): # , ABC
             self._frames.append(pixels)
         stacked_pixels = self.get_stacked_pixels()
         return stacked_pixels, sensor_info
+    
+    def step_until_still(self, action, max_iter = 100, vel_thresh = 0.03):
+        obs, reward, done, env_info = self._env.step(action)
+        count = 1
+        while count < max_iter:
+            self._env.env._elapsed_steps -= 1
+            obs, reward, done, env_info = self._env.step(action)
+            state = self._env.get_env_state()
+            if np.max(np.abs(state['qvel'])) < vel_thresh:
+                break
+            count += 1
+        return obs, reward, done, env_info
+
+    def trim_action(self, action, max_diff = 0.05):#0.025):
+        diff = action - self.prev_action
+        diff[diff > max_diff] = max_diff
+        diff[diff < -max_diff] = -max_diff
+        return self.prev_action + diff
 
     def step(self, action):
         reward_sum = 0.0
         discount_prod = 1.0 # TODO pen can terminate early 
         n_goal_achieved = 0
         for i_action in range(self._num_repeats): 
-            obs, reward, done, env_info = self._env.step(action)
+            if self.wait_until_still:
+                action = self.trim_action(action)
+                self.prev_action = action
+                obs, reward, done, env_info = self.step_until_still(action)
+            else:
+                obs, reward, done, env_info = self._env.step(action)
             reward_sum += reward 
             if env_info['goal_achieved'] == True:
                 n_goal_achieved += 1

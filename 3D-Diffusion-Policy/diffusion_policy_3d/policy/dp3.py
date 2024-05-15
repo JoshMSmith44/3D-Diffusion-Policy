@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange, reduce
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
+#from diffusion_policy_3d.model.diffusion.convex_scheduling_ddpm  import DDPMScheduler 
 from termcolor import cprint
 import copy
 import time
@@ -17,6 +18,9 @@ from diffusion_policy_3d.model.diffusion.mask_generator import LowdimMaskGenerat
 from diffusion_policy_3d.common.pytorch_util import dict_apply
 from diffusion_policy_3d.common.model_util import print_params
 from diffusion_policy_3d.model.vision.pointnet_extractor import DP3Encoder
+from diffusion_policy_3d.model.diffusion.convex_scheduling_ddpm  import DDPMScheduler 
+from .convex_model import ConvexModel
+import numpy as np
 
 class DP3(BasePolicy):
     def __init__(self, 
@@ -130,7 +134,12 @@ class DP3(BasePolicy):
 
 
         print_params(self)
-        
+
+        self.convex_diffusion = True
+        if self.convex_diffusion:
+            self.convex_model = ConvexModel()
+        self.first_action_predict = True
+
     # ========= inference  ============
     def conditional_sample(self, 
             condition_data, condition_mask,
@@ -142,6 +151,12 @@ class DP3(BasePolicy):
             ):
         model = self.model
         scheduler = self.noise_scheduler
+        if self.convex_diffusion:
+            convex_scheduler = copy.deepcopy(self.noise_scheduler)
+            convex_scheduler.set_timesteps(self.num_inference_steps)
+            #convex_scheduler.config.prediction_type = "epsilon"
+            self.convex_model.update_betas(np.array(convex_scheduler.betas.cpu()))
+            offset = self.convex_model.offset
 
 
         trajectory = torch.randn(
@@ -161,11 +176,22 @@ class DP3(BasePolicy):
             model_output = model(sample=trajectory,
                                 timestep=t, 
                                 local_cond=local_cond, global_cond=global_cond)
+            #hand constraint output
+            #print("mean model out", torch.mean(torch.abs(model_output[:, :, 4:])))
             
             # 3. compute previous image: x_t -> x_t-1
             trajectory = scheduler.step(
                 model_output, t, trajectory, ).prev_sample
             
+            if self.convex_diffusion:
+                trajectory[condition_mask] = condition_data[condition_mask]
+                four_action_save = trajectory[:, :, :offset]
+                conv_model_out = self.convex_model.get_model_output(trajectory, t)
+                #print("mean conv out", torch.mean(torch.abs(conv_model_out[:, :, 4:])))
+                trajectory = convex_scheduler.step(conv_model_out, t, trajectory).prev_sample
+                trajectory[condition_mask] = condition_data[condition_mask]
+                trajectory[:, :, :offset] = four_action_save
+
                 
         # finally make sure conditioning is enforced
         trajectory[condition_mask] = condition_data[condition_mask]   
@@ -225,6 +251,10 @@ class DP3(BasePolicy):
             cond_data[:,:To,Da:] = nobs_features
             cond_mask[:,:To,Da:] = True
 
+        if self.convex_diffusion and self.first_action_predict:
+            self.first_action_predict = False
+            self.convex_model.set_normalizer(self.normalizer)
+
         # run sampling
         nsample = self.conditional_sample(
             cond_data, 
@@ -255,6 +285,8 @@ class DP3(BasePolicy):
     # ========= training  ============
     def set_normalizer(self, normalizer: LinearNormalizer):
         self.normalizer.load_state_dict(normalizer.state_dict())
+        if self.convex_diffusion:
+            self.convex_model.set_normalizer(copy.deepcopy(self.normalizer))
 
     def compute_loss(self, batch):
         # normalize input
